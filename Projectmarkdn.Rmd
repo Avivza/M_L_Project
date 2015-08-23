@@ -1,0 +1,93 @@
+---
+title: "Machine Learning - Final Project"
+author: "Aviv Zach"
+date: "Thursday, August 20, 2015"
+output: html_document
+---
+
+###Abstract
+This paper describes the steps that were taken in order to build the model for the final project in the Machhine Learning course.
+
+Data was driven from the Human Activity Recognition web site. The data contain physical information that was collected from 6 diffrent subjects as they were performing barbell lifts correctly and incorrectly in 5 different ways. 
+
+The following model predicts in what way the participants preforme barbell lifts.
+
+###Loading the data
+
+
+```{r,warning=FALSE,message=FALSE}
+#url<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+#download.file(url,"trainData.csv")
+library(caret)
+unclean_dt<-read.csv("trainData.csv")
+```
+
+###Cleaning the data of irrelevant variabels
+First I cleaned variabels that consists summary statistics on the data (max/min/mean,etc.)
+```{r}
+unnescry_stat<-grep("max|min|avg|stddev|var|amplitude|total|kurtosis|skewness",names(unclean_dt))
+```
+
+
+Then erase irrelevent meta data
+```{r}
+meta_data<-c(1:7)
+remove<-c(unnescry_stat,meta_data)
+trndt<-unclean_dt[,-remove]
+```
+
+###Removing corrlated variabels
+```{r}
+rm_cor<-findCorrelation(cor(trndt[-49]))
+trndt<-trndt[,-rm_cor]
+```
+
+#Partitioning the Data
+I partitioned the data to a training set and a test set: 
+```{r}
+traininx<-createDataPartition(y = trndt$classe,p = 0.7,list = FALSE)
+train<-trndt[traininx,]
+test <-trndt[-traininx,]
+```
+
+#Which Variabels should I use?:
+I used ANOVA in order to check which variabels were correlated with the classe( the way that the subject performed barbell lifts ). 
+```{r}
+colums<-vector()
+for ( i in 1:42){
+        p<-summary(aov(train[,i]~train[,43]))[[1]][["Pr(>F)"]][1]
+        if (p<0.05) {
+                colums<-c(colums,i)
+        }
+}
+new_train<-train[,c(colums,43)]
+```
+Next I used only the variabells that were significantly correlated with classe. 
+
+The variabels that I used are:
+```{r}
+names(train)[colums]
+```
+
+
+#Model Building
+I built the model using boosting with trees method, and used a 10-fold cross validation. 
+```{r,warning=FALSE,message=FALSE}
+t_c<- trainControl(method="repeatedcv", number=10,)
+mdl<- train(new_train$classe~., data=new_train, trControl=t_c, method="gbm",verbose=FALSE)
+```
+
+#Testing the model
+Itested the model on the test part of the dataset to get a 0.95 accuracy
+```{r}
+new_test<-test[,c(colums,43)]
+pre<-predict(mdl,new_test)
+confusionMatrix(new_test[,39],pre)
+```
+
+```{r,echo=FALSE}
+right<-(sum(new_test[,39]==pre))/length(pre)
+wrong<-(sum(!new_test[,39]==pre))/length(pre)
+barplot(cbind(right,wrong),main="Model Accuracy", ylim=c(0,1),col="light blue",border= 'light blue', ylab="Frequency")
+```
+
